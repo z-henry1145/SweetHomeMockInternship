@@ -662,7 +662,7 @@ public class MultipleLevelsPlanPanel extends JPanel implements PlanView, Printab
    * Prints the plan component.
    */
   public int print(Graphics graphics, PageFormat pageFormat, int pageIndex) throws PrinterException {
-    // Selecting a level also updates the visible Swing tabs.
+    // Printing and screen painting share the plan component's level-specific caches.
     return SwingTools.printOnEventDispatchThread(this.planComponent, graphics, pageFormat, pageIndex);
   }
 

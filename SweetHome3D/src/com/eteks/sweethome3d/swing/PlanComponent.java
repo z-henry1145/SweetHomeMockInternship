@@ -292,6 +292,7 @@ public class PlanComponent extends JComponent implements PlanView, Scrollable, P
   private Map<PlanController.EditableProperty, JFormattedTextField> toolTipEditableTextFields;
   private KeyListener                       toolTipKeyListener;
   
+  private Level                             printedLevel;
   private List<HomePieceOfFurniture>        sortedLevelFurniture;
   private List<Room>                        sortedLevelRooms;
   private Map<TextStyle, Font>              fonts;
@@ -866,9 +867,7 @@ public class PlanComponent extends JComponent implements PlanView, Scrollable, P
             otherLevelsWallsCache = null;
             otherLevelsRoomsCache = null;
             otherLevelsRoomAreaCache = null;
-            wallAreasCache = null;
-            sortedLevelFurniture = null;
-            sortedLevelRooms = null;
+            clearLevelGeometryCaches();
             repaint();
           }
         }
@@ -938,9 +937,7 @@ public class PlanComponent extends JComponent implements PlanView, Scrollable, P
           otherLevelsWallsCache = null;
           otherLevelsRoomsCache = null;
           otherLevelsRoomAreaCache = null;
-          wallAreasCache = null;
-          sortedLevelRooms = null;
-          sortedLevelFurniture = null;
+          clearLevelGeometryCaches();
           repaint();
         }
       });
@@ -2013,20 +2010,21 @@ public class PlanComponent extends JComponent implements PlanView, Scrollable, P
     }
     List<Level> levels = this.home.getLevels();
     if (levels.isEmpty()) {
-      return printSelectedLevel(g, pageFormat, pageIndex, false);
+      return printPlanPage(g, pageFormat, pageIndex, false);
     }
     int levelPage = 0;
     for (Level level : levels) {
       if (level.isViewable()) {
         if (levelPage == pageIndex) {
-          Level previousLevel = this.home.getSelectedLevel();
+          // The editor listens for level changes and would deselect furniture on other floors.
+          Level previousPrintedLevel = this.printedLevel;
           try {
-            this.home.setSelectedLevel(level);
-            printSelectedLevel(g, pageFormat, 0, true);
+            setPrintedLevel(level);
+            printPlanPage(g, pageFormat, 0, true);
             // Empty levels also occupy a page, so later levels can still print.
             return PAGE_EXISTS;
           } finally {
-            this.home.setSelectedLevel(previousLevel);
+            setPrintedLevel(previousPrintedLevel);
           }
         }
         levelPage++;
@@ -2035,7 +2033,22 @@ public class PlanComponent extends JComponent implements PlanView, Scrollable, P
     return NO_SUCH_PAGE;
   }
 
-  private int printSelectedLevel(Graphics g, PageFormat pageFormat, int pageIndex, boolean fitLevelOnPage) {
+  private Level getPaintedLevel() {
+    return this.printedLevel != null ? this.printedLevel : this.home.getSelectedLevel();
+  }
+
+  private void setPrintedLevel(Level level) {
+    this.printedLevel = level;
+    clearLevelGeometryCaches();
+  }
+
+  private void clearLevelGeometryCaches() {
+    this.wallAreasCache = null;
+    this.sortedLevelRooms = null;
+    this.sortedLevelFurniture = null;
+  }
+
+  private int printPlanPage(Graphics g, PageFormat pageFormat, int pageIndex, boolean fitLevelOnPage) {
     List<Selectable> printedItems = getPaintedItems(); 
     Rectangle2D printedItemBounds = getItemsBounds(g, printedItems);
     if (printedItemBounds != null) {
@@ -2227,7 +2240,7 @@ public class PlanComponent extends JComponent implements PlanView, Scrollable, P
    * Paints background image and returns <code>true</code> if an image is painted.
    */
   private boolean paintBackgroundImage(Graphics2D g2D, PaintMode paintMode) {
-    Level selectedLevel = this.home.getSelectedLevel();
+    Level selectedLevel = getPaintedLevel();
     Level backgroundImageLevel = null;
     if (selectedLevel != null) { 
       // Search the first level at same elevation with a background image
@@ -2251,7 +2264,9 @@ public class PlanComponent extends JComponent implements PlanView, Scrollable, P
       // Under Mac OS X, prepare background image with alpha because Java 5/6 doesn't always 
       // paint images correctly with alpha, and Java 7 blocks for some images
       final boolean prepareBackgroundImageWithAlphaInMemory = OperatingSystem.isMacOSX();
-      if (this.backgroundImageCache == null && paintMode == PaintMode.PAINT) {
+      // The screen's cached image may belong to a different floor than the printed page.
+      BufferedImage cachedImage = selectedLevel == this.home.getSelectedLevel() ? this.backgroundImageCache : null;
+      if (cachedImage == null && paintMode == PaintMode.PAINT) {
         // Load background image in an executor
         if (backgroundImageLoader == null) {
           backgroundImageLoader = Executors.newSingleThreadExecutor();
@@ -2273,8 +2288,8 @@ public class PlanComponent extends JComponent implements PlanView, Scrollable, P
         if (!prepareBackgroundImageWithAlphaInMemory) {
           oldComposite = setTransparency(g2D, 0.7f);
         }
-        g2D.drawImage(this.backgroundImageCache != null
-            ? this.backgroundImageCache
+        g2D.drawImage(cachedImage != null
+            ? cachedImage
             : readBackgroundImage(backgroundImage.getImage(), prepareBackgroundImageWithAlphaInMemory), 0, 0, this);
         if (!prepareBackgroundImageWithAlphaInMemory) {
           g2D.setComposite(oldComposite);
@@ -3457,7 +3472,7 @@ public class PlanComponent extends JComponent implements PlanView, Scrollable, P
     Level level = item.getLevel();
     return level == null
         || (level.isViewable()
-            && item.isAtLevel(this.home.getSelectedLevel()));
+            && item.isAtLevel(getPaintedLevel()));
   }
 
   /**
