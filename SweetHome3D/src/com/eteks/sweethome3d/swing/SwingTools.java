@@ -34,6 +34,9 @@ import java.awt.geom.Area;
 import java.awt.image.BufferedImage;
 import java.awt.image.FilteredImageSource;
 import java.awt.image.RGBImageFilter;
+import java.awt.print.PageFormat;
+import java.awt.print.Printable;
+import java.awt.print.PrinterException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URL;
@@ -47,7 +50,9 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.MissingResourceException;
 import java.util.ResourceBundle;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
+import java.util.concurrent.FutureTask;
 
 import javax.imageio.ImageIO;
 import javax.imageio.ImageReader;
@@ -95,6 +100,30 @@ public class SwingTools {
 
   private SwingTools() {
     // This class contains only tools
+  }
+
+  /** Renders a page synchronously while keeping Swing model changes on the event thread. */
+  static int printOnEventDispatchThread(Printable view, Graphics g, PageFormat format, int page) throws PrinterException {
+    if (EventQueue.isDispatchThread()) {
+      return view.print(g, format, page);
+    }
+    FutureTask<Integer> result = new FutureTask<Integer>(() -> view.print(g, format, page));
+    EventQueue.invokeLater(result);
+    try {
+      return result.get();
+    } catch (InterruptedException ex) {
+      result.cancel(false);
+      Thread.currentThread().interrupt();
+      throw new InterruptedPrinterException("Print interrupted");
+    } catch (ExecutionException ex) {
+      Throwable cause = ex.getCause();
+      if (cause instanceof PrinterException) {
+        throw (PrinterException)cause;
+      } else if (cause instanceof RuntimeException) {
+        throw (RuntimeException)cause;
+      }
+      throw (Error)cause;
+    }
   }
 
   /**
