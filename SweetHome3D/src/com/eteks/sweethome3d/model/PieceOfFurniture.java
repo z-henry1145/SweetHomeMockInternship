@@ -57,6 +57,11 @@ public interface PieceOfFurniture {
    */
   public abstract float getWidth();
 
+  /** Returns the volume in cubic centimeters, using the current dimensions. */
+  default float getVolume() {
+    return getWidth() * getDepth() * getHeight();
+  }
+
   /**
    * Returns the elevation of this piece of furniture.
    */
