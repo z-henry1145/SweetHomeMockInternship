@@ -789,8 +789,11 @@ public class FurnitureTable extends JTable implements View, Printable {
     }    
     Color oldGridColor = getGridColor();
     FurnitureFilter screenFilter = getFurnitureFilter();
+    ListSelectionModel screenSelection = getSelectionModel();
     try {
       if (screenFilter != null) {
+        // Reloading the unfiltered rows clears JTable's selection model.
+        setSelectionModel(createDefaultSelectionModel());
         setFurnitureFilter(null);
       }
       setColumnModel(printableColumnModel);
@@ -801,7 +804,11 @@ public class FurnitureTable extends JTable implements View, Printable {
       setColumnModel(columnModel);
       setGridColor(oldGridColor);
       if (screenFilter != null) {
-        setFurnitureFilter(screenFilter);
+        try {
+          setFurnitureFilter(screenFilter);
+        } finally {
+          setSelectionModel(screenSelection);
+        }
       }
     }
   }
